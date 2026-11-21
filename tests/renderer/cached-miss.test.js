@@ -151,7 +151,7 @@ describe('resolveTrack with a stale miss', () => {
   const NUDE = { id: 'Bandcamp-nude', title: 'Nude', artist: 'Radiohead', album: 'In Rainbows' };
   const FOUND = { id: 'bc-nude', title: 'Nude', artist: 'Radiohead', album: 'In Rainbows', bandcampUrl: 'https://radiohead.bandcamp.com/track/nude' };
 
-  function harness({ bandcampVersion = '1.4.9', answer = FOUND, cache = {} } = {}) {
+  function harness({ bandcampVersion = '1.4.9', answer = FOUND, localAnswer = null, cache = {} } = {}) {
     const bandcamp = {
       id: 'bandcamp', name: 'Bandcamp', version: bandcampVersion,
       capabilities: { resolve: true }, play: () => true,
@@ -160,7 +160,7 @@ describe('resolveTrack with a stale miss', () => {
     const localfiles = {
       id: 'localfiles', name: 'Local Files', version: '1.0.0',
       capabilities: { resolve: true, local: true }, play: () => true,
-      resolve: jest.fn(async () => null),
+      resolve: jest.fn(async () => localAnswer),
     };
     const ids = ['localfiles', 'bandcamp'];
     const ref = (current) => ({ current });
@@ -199,7 +199,7 @@ describe('resolveTrack with a stale miss', () => {
     };
     // eslint-disable-next-line no-new-func
     const resolveTrack = new Function('scope', `with (scope) { return (${fnText}); }`)(scope);
-    return { resolveTrack, bandcamp, cache: scope.trackSourcesCache.current };
+    return { resolveTrack, bandcamp, localfiles, validateCachedSources: scope.validateCachedSources, cache: scope.trackSourcesCache.current };
   }
 
   const KEY = 'radiohead|nude';
@@ -274,5 +274,55 @@ describe('resolveTrack with a stale miss', () => {
     expect(typeof cache[KEY].unanswered.bandcamp).toBe('number');
     await resolveTrack({ ...NUDE, sources: {} }, 'Radiohead', {});
     expect(bandcamp.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  // The local library changed (the effect on localLibraryVersion): only a
+  // local-library plug-in can have a new answer.
+  describe('localFilesOnly', () => {
+    const entry = (sources, over = {}) => ({ [KEY]: { sources, timestamp: Date.now() - 2 * DAY, resolverHash: 'hash', v: 2, ...over } });
+    const ask = (h) => h.resolveTrack({ ...NUDE, sources: {} }, 'Radiohead', { localFilesOnly: true });
+
+    test('asks the local plug-in again past its miss, and no service that never answered', async () => {
+      const cache = entry({ localfiles: { noMatch: true, resolvedAt: recent(), version: '1.0.0' } });
+      const cachedAt = cache[KEY].timestamp;
+      const h = harness({ localAnswer: localSource, cache });
+      await ask(h);
+      expect(h.localfiles.resolve).toHaveBeenCalledTimes(1);
+      expect(h.bandcamp.resolve).not.toHaveBeenCalled();
+      expect(cache[KEY].sources.localfiles).toMatchObject({ filePath: '/m/nude.flac' });
+      // Bandcamp wasn't asked, so the entry is no younger for it.
+      expect(cache[KEY].timestamp).toBe(cachedAt);
+    });
+
+    test('a track that has its file asks nobody, the day-old check included', async () => {
+      const h = harness({ cache: entry({ localfiles: localSource }) });
+      await ask(h);
+      expect(h.localfiles.resolve).not.toHaveBeenCalled();
+      expect(h.bandcamp.resolve).not.toHaveBeenCalled();
+      expect(h.validateCachedSources).not.toHaveBeenCalled();
+    });
+
+    test('a track nothing has resolved, or whose answers have expired, is left to its row', async () => {
+      for (const cache of [{}, entry({ bandcamp: FOUND }, { timestamp: Date.now() - 8 * DAY })]) {
+        const h = harness({ cache });
+        await ask(h);
+        expect(h.localfiles.resolve).not.toHaveBeenCalled();
+        expect(h.bandcamp.resolve).not.toHaveBeenCalled();
+      }
+    });
+
+    test('a track whose local file left the library asks every service', async () => {
+      const h = harness({ cache: entry({}, { resolverHash: null }) });
+      await ask(h);
+      expect(h.bandcamp.resolve).toHaveBeenCalledTimes(1);
+      expect(h.localfiles.resolve).toHaveBeenCalledTimes(1);
+    });
+
+    test('the library-change effect re-resolves the open album and playlist this way', () => {
+      const from = app.indexOf('// Re-resolve album/playlist tracks when local files library changes');
+      const effect = app.slice(from, app.indexOf('}, [localLibraryVersion]);', from));
+      expect(effect.match(/resolveTrack\([^)]*\{ localFilesOnly: true \}\)/g)).toHaveLength(2);
+      expect(effect).not.toContain('forceRefresh: true');
+    });
   });
 });

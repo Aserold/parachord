@@ -15617,24 +15617,24 @@ ${trackListXml}
     // Only re-resolve if a local-library resolver (capabilities.local) is active
     if (!activeResolvers.some(isLocalResolver)) return;
 
-    // Re-resolve release tracks if viewing an artist release.
-    // Uses forceRefresh: true to bypass the in-memory cache (the cached
-    // Spotify/AM source is fine; we want to ADD a localfiles source if one
-    // now exists). This is rare (only fires on watch-folder add), so
-    // bypassing the scheduler's priority queue is acceptable.
+    // The cached sources are fine; we want to ADD a local file if one now
+    // exists, so only local-library plug-ins are asked (localFilesOnly). This
+    // runs for every track at once on every library change, a watch folder's
+    // file changes included.
     if (currentRelease && currentRelease.tracks) {
       console.log('🔄 Local library changed, re-resolving release tracks...');
       const artistName = currentArtist?.name || 'Unknown Artist';
       currentRelease.tracks.forEach(track => {
-        resolveTrack(track, artistName, { forceRefresh: true });
+        // The id the album's rows read their sources by (as the effect above).
+        const id = trackSlug(artistName || 'unknown', track.title || 'untitled', currentRelease.title || 'noalbum');
+        resolveTrack({ ...track, id }, artistName, { localFilesOnly: true });
       });
     }
 
-    // Re-resolve playlist tracks if viewing a playlist (same rationale).
     if (selectedPlaylist && playlistTracks.length > 0) {
       console.log('🔄 Local library changed, re-resolving playlist tracks...');
       playlistTracks.forEach(track => {
-        resolveTrack(track, track.artist || 'Unknown Artist', { forceRefresh: true });
+        resolveTrack(track, track.artist || 'Unknown Artist', { localFilesOnly: true });
       });
     }
   }, [localLibraryVersion]);
@@ -22560,7 +22560,9 @@ ${trackListXml}
     // onScreen: the track is on screen (a page's visible row, the hovered
     // row, the open album), so the local-file gate below doesn't apply
     // (lib/enrichment-gate.js, #1532).
-    const { forceRefresh = false, isQueueResolution = false, signal, playlistId, forceEnrichment = false, onScreen = false } = options;
+    // localFilesOnly: the local library changed, so only a local-library
+    // plug-in can have a new answer; no other service is asked.
+    const { forceRefresh = false, isQueueResolution = false, signal, playlistId, localFilesOnly = false, forceEnrichment = false, onScreen = false } = options;
 
     // Validate required parameters
     if (!track || !track.title) {
@@ -22686,12 +22688,15 @@ ${trackListXml}
     // (Amazon on Prime) shows no icon either way, and fails every time.
     const askAgainIds = currentActiveResolvers.filter(id =>
       canResolve(id) && (playbackResolversRef.current || currentActiveResolvers).includes(id));
-    const missingResolvers = cacheValid
-      ? resolversToAskAgain(cachedData, askAgainIds, now, missIsStale)
-      : currentActiveResolvers.filter(id =>
-        !availableResolverIds.includes(id) &&
-        currentResolvers.find(r => r.id === id)?.capabilities?.resolve
-      );
+    const missingResolvers = localFilesOnly
+      ? currentActiveResolvers.filter(id => isLocalResolver(id) && canResolve(id)
+        && (!cachedData?.sources?.[id] || isMiss(cachedData.sources[id])))
+      : cacheValid
+        ? resolversToAskAgain(cachedData, askAgainIds, now, missIsStale)
+        : currentActiveResolvers.filter(id =>
+          !availableResolverIds.includes(id) &&
+          currentResolvers.find(r => r.id === id)?.capabilities?.resolve
+        );
     // Set on a real cache hit that still has services to ask again; the
     // ask-again branch below then queries only those.
     let askAgainOnly = false;
@@ -22783,7 +22788,7 @@ ${trackListXml}
 
       if (missingResolvers.length === 0) {
         // Background validation: if cache is > 24 hours old, validate in background
-        if (cacheAge >= 24) {
+        if (cacheAge >= 24 && !localFilesOnly) {
           console.log(`🔄 Cache > 24h old, validating in background...`);
           setTimeout(() => validateCachedSources(track, artistName, cachedData.sources, cacheKey, trackKey), 1000);
         }
@@ -23058,7 +23063,8 @@ ${trackListXml}
       markTrackSourcesDirty();
       trackSourcesCache.current[cacheKey] = {
         sources: sources,
-        timestamp: Date.now(),
+        // The other services weren't asked: their answers keep their age.
+        timestamp: localFilesOnly ? cachedData.timestamp : Date.now(),
         resolverHash: getResolverSettingsHash(),
         v: CACHE_SCHEMA_VERSION,
         unanswered: unansweredAfter(cachedData.unanswered, missingResolvers, sources)
@@ -23086,6 +23092,11 @@ ${trackListXml}
     if (cachedData && cachedData.resolverHash !== currentResolverHash) {
       console.log(`🔄 Resolver settings changed, re-resolving: ${track.title}`);
     }
+
+    // A track nothing has resolved yet gets its local file with the rest, when
+    // its row resolves. One whose local file left the library (resolverHash
+    // null, above) goes on: the other services are its sources now.
+    if (localFilesOnly && cachedData?.resolverHash !== null) return {};
 
     console.log(`🔍 Resolving: ${artistName} - ${track.title}${forceRefresh ? ' (forced refresh)' : ''}`);
 
