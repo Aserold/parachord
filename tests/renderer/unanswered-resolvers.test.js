@@ -68,7 +68,7 @@ describe('resolveTrack wiring', () => {
   const body = src.slice(start, src.indexOf('// Keep resolveTrackRef in sync', start));
 
   test('a valid cache still lists services that never answered', () => {
-    expect(body).toMatch(/const missingResolvers = cacheValid\s*\?\s*resolversToAskAgain\(/);
+    expect(body).toMatch(/const missingResolvers = [\s\S]{0,250}cacheValid\s*\?\s*resolversToAskAgain\(/);
     expect(body).not.toMatch(/const missingResolvers = cacheValid \? \[\] :/);
   });
 
