@@ -5,7 +5,7 @@
  * so a new service (Tidal/Qobuz/…) is a future adapter, not an engine edit.
  *
  *   'ByNativeId'   — remove specific tracks by their native id/URI (Spotify
- *                    DELETE /playlists/{id}/tracks by URI).
+ *                    DELETE /playlists/{id}/items by URI).
  *   'ByPosition'   — remove by index (ListenBrainz delete-by-position; its
  *                    clear-then-add update maps to positional removal).
  *   'Unsupported'  — no track-removal API at all (Apple Music public library

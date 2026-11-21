@@ -40,7 +40,7 @@ Resolvers that implement `lookupPlaylist`:
 
 | Plugin | Playlist URLs | Notes |
 |---|---|---|
-| spotify.axe | `open.spotify.com/playlist/*`, `open.spotify.com/intl-*/playlist/*`, `spotify:playlist:*` | Web API, 100 tracks per page. On 403, 404 or no token, falls back to scraping the embed page via the `spotify-scrape-playlist` IPC (main.js). |
+| spotify.axe | `open.spotify.com/playlist/*`, `open.spotify.com/intl-*/playlist/*`, `spotify:playlist:*` | Web API (`/playlists/{id}/items`, 50 tracks per page). On 403, 404 or no token, falls back to scraping the embed page via the `spotify-scrape-playlist` IPC (main.js). A rate limit or a failed request ends the import with an error. |
 | applemusic.axe | `music.apple.com/*/playlist/*/*` | `window.appleMusicLookupPlaylist`: a MusicKit catalog lookup. Returns nothing when MusicKit is not configured. |
 | soundcloud.axe | `soundcloud.com/*/sets/*` | Needs a SoundCloud OAuth token; returns nothing without one. |
 | youtube.axe | `youtube.com/playlist?list=*`, `music.youtube.com`, any URL with `&list=` | Reads the playlist page's `ytInitialData` JSON (today's `lockupViewModel` entries and the older `playlistVideoRenderer` ones; only the first page, so it stops at 100 tracks), with each video's length from its thumbnail badge. Splits "Artist - Title" on the dash, and treats an "Artist - Topic" channel as the artist. Until youtube.axe 1.0.4 (2026-11) it matched only the older shape, so every import came back empty. Not mentioned in the modal label. |
