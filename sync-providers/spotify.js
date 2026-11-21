@@ -213,11 +213,16 @@ const spotifyFetch = async (endpoint, token, allItems = [], onProgress, refreshT
   return combined;
 };
 
+// A playlist's tracks live at /items since Spotify's February 2026 changes
+// (entries carry `item`; the removed /tracks' carried `track`), 50 a page.
+const fetchPlaylistItems = (playlistId, token, onProgress, refreshToken) =>
+  spotifyFetch(`/playlists/${playlistId}/items?limit=50`, token, [], onProgress, refreshToken);
+
 /**
  * Transform Spotify track object to SyncTrack
  */
 const transformTrack = (item, addedAt) => {
-  const track = item.track || item;
+  const track = item.item || item.track || item;
   const artistName = track.artists?.map(a => a.name).join(', ') || 'Unknown Artist';
   const albumName = track.album?.name || 'Unknown Album';
   const duration = Math.round((track.duration_ms || 0) / 1000);
@@ -340,7 +345,7 @@ const SpotifySyncProvider = {
     playlists: true,
     playlistFolders: true,
     // N-way materialize dispatch (parachord#911). Spotify has a full
-    // track-level API: DELETE /playlists/{id}/tracks by URI, PUT for order,
+    // track-level API: DELETE /playlists/{id}/items by URI, PUT for order,
     // and playlist delete (unfollow) + rename.
     trackRemoveMode: 'ByNativeId',
     canReorder: true,
@@ -486,9 +491,9 @@ const SpotifySyncProvider = {
    * Fetch tracks for a specific playlist
    */
   async fetchPlaylistTracks(playlistId, token, onProgress, refreshToken) {
-    const items = await spotifyFetch(`/playlists/${playlistId}/tracks?limit=100`, token, [], onProgress, refreshToken);
+    const items = await fetchPlaylistItems(playlistId, token, onProgress, refreshToken);
     return items
-      .filter(item => item.track) // Filter out null tracks (deleted/unavailable)
+      .filter(item => item.item || item.track) // Filter out null tracks (deleted/unavailable)
       .map(item => transformTrack(item, item.added_at));
   },
 
@@ -564,9 +569,9 @@ const SpotifySyncProvider = {
     // (#831) — the less work this function does per playlist, the less
     // the cross-provider mutex matters.
     try {
-      const currentItems = await spotifyFetch(`/playlists/${playlistId}/tracks?limit=100&fields=items(track(uri)),next`, token, [], null, null);
+      const currentItems = await fetchPlaylistItems(playlistId, token);
       const remoteUris = currentItems
-        .map(item => item?.track?.uri)
+        .map(item => (item?.item || item?.track)?.uri)
         .filter(uri => typeof uri === 'string' && uri.length > 0);
       const sameOrder =
         remoteUris.length === uris.length
@@ -585,10 +590,7 @@ const SpotifySyncProvider = {
 
     if (uris.length === 0) {
       // Clear the playlist if no valid tracks
-      const result = await spotifyRequest(`/playlists/${playlistId}/tracks`, token, {
-        method: 'PUT',
-        body: { uris: [] }
-      });
+      const result = await spotifyRequest(`/playlists/${playlistId}/items`, token, { method: 'PUT', body: { uris: [] } });
       return { success: true, snapshotId: result.snapshot_id };
     }
 
@@ -602,19 +604,13 @@ const SpotifySyncProvider = {
     let snapshotId;
 
     // First batch: replace all tracks
-    const firstResult = await spotifyRequest(`/playlists/${playlistId}/tracks`, token, {
-      method: 'PUT',
-      body: { uris: batches[0] }
-    });
+    const firstResult = await spotifyRequest(`/playlists/${playlistId}/items`, token, { method: 'PUT', body: { uris: batches[0] } });
     snapshotId = firstResult.snapshot_id;
 
     // Subsequent batches: add tracks
     for (let i = 1; i < batches.length; i++) {
       await new Promise(resolve => setTimeout(resolve, 100)); // Rate limit
-      const addResult = await spotifyRequest(`/playlists/${playlistId}/tracks`, token, {
-        method: 'POST',
-        body: { uris: batches[i] }
-      });
+      const addResult = await spotifyRequest(`/playlists/${playlistId}/items`, token, { method: 'POST', body: { uris: batches[i] } });
       snapshotId = addResult.snapshot_id;
     }
 
@@ -636,7 +632,7 @@ const SpotifySyncProvider = {
 
   /**
    * Remove specific tracks from a playlist by their Spotify URI.
-   * DELETE /v1/playlists/{id}/tracks  body { tracks: [{ uri }] }; batched 100;
+   * DELETE /v1/playlists/{id}/items  body { items: [{ uri }] }; batched 100;
    * returns the new snapshot_id (the echo-suppression anchor).
    * @returns {Promise<{success:boolean, snapshotId:string|undefined}>}
    */
@@ -646,9 +642,9 @@ const SpotifySyncProvider = {
     for (let i = 0; i < uris.length; i += 100) {
       const batch = uris.slice(i, i + 100);
       if (i > 0) await new Promise((r) => setTimeout(r, 100)); // rate-limit between batches
-      const result = await spotifyRequest(`/playlists/${playlistId}/tracks`, token, {
+      const result = await spotifyRequest(`/playlists/${playlistId}/items`, token, {
         method: 'DELETE',
-        body: { tracks: batch.map((uri) => ({ uri })) },
+        body: { items: batch.map((uri) => ({ uri })) },
       });
       snapshotId = result.snapshot_id;
     }
@@ -900,7 +896,7 @@ const SpotifySyncProvider = {
    * @returns {Object} - { success: boolean }
    */
   async deletePlaylist(playlistId, token) {
-    await spotifyRequest(`/playlists/${playlistId}/followers`, token, {
+    await spotifyRequest(`/me/library?uris=${encodeURIComponent(`spotify:playlist:${playlistId}`)}`, token, {
       method: 'DELETE'
     });
     return { success: true };
@@ -964,10 +960,7 @@ const SpotifySyncProvider = {
 
   // Create a new playlist on Spotify
   async createPlaylist(name, description, token) {
-    // Get current user ID
-    const user = await spotifyRequest('/me', token);
-
-    const playlist = await spotifyRequest(`/users/${user.id}/playlists`, token, {
+    const playlist = await spotifyRequest('/me/playlists', token, {
       method: 'POST',
       body: {
         name,

@@ -97,7 +97,7 @@ describe('Spotify removePlaylistTracksByNativeId — DELETE-by-URI HTTP shape', 
     global.fetch = realFetch;
   });
 
-  test('issues DELETE /playlists/{id}/tracks with { tracks: [{ uri }] } and returns snapshotId', async () => {
+  test('issues DELETE /playlists/{id}/items with { items: [{ uri }] } and returns snapshotId', async () => {
     const calls = [];
     global.fetch = async (url, opts) => {
       calls.push({ url, opts });
@@ -110,10 +110,10 @@ describe('Spotify removePlaylistTracksByNativeId — DELETE-by-URI HTTP shape', 
     );
     expect(calls.length).toBe(1);
     expect(calls[0].opts.method).toBe('DELETE');
-    expect(calls[0].url).toContain('/playlists/PID/tracks');
+    expect(calls[0].url).toContain('/playlists/PID/items');
     expect(calls[0].opts.headers.Authorization).toBe('Bearer tok');
     expect(JSON.parse(calls[0].opts.body)).toEqual({
-      tracks: [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }],
+      items: [{ uri: 'spotify:track:1' }, { uri: 'spotify:track:2' }],
     });
     expect(result).toEqual({ success: true, snapshotId: 'snap2' });
   });

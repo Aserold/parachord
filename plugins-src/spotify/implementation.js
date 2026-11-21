@@ -301,7 +301,9 @@ module.exports = {
     if (config.token) {
       try {
         var allTracks = [];
-        var nextUrl = 'https://api.spotify.com/v1/playlists/' + playlistId + '/tracks?limit=100';
+        // /items since Spotify's February 2026 changes: its entries carry
+        // `item` (the removed /tracks' carried `track`), 50 a page.
+        var nextUrl = 'https://api.spotify.com/v1/playlists/' + playlistId + '/items?limit=50';
         var playlistName = '';
         var playlistImage = null;
         var playlistOwner = '';
@@ -329,6 +331,8 @@ module.exports = {
           apiError = 'metadata-403';
         } else if (playlistResp.status === 404) {
           apiError = 'not-found';
+        } else {
+          apiError = playlistResp.status === 429 ? 'rate-limited' : 'api-error';
         }
         if (!apiError) {
           while (nextUrl) {
@@ -337,23 +341,14 @@ module.exports = {
             });
             if (!response.ok) {
               console.error('Spotify playlist tracks fetch failed:', response.status);
-              if (response.status === 403) {
-                var tErrBody = '';
-                try {
-                  tErrBody = await response.text();
-                  console.error('Spotify playlist tracks 403 response:', tErrBody);
-                } catch (e) {}
-                apiError = 'tracks-403';
-                break;
-              }
+              apiError = response.status === 403 ? 'tracks-403' : response.status === 429 ? 'rate-limited' : 'api-error';
               break;
             }
             var data = await response.json();
             var items = data.items || [];
             for (var i = 0; i < items.length; i++) {
-              var item = items[i];
-              if (!item.track || item.track.type !== 'track') continue;
-              var track = item.track;
+              var track = items[i].item || items[i].track;
+              if (!track || track.type !== 'track') continue;
               allTracks.push({
                 id: 'spotify-' + track.id,
                 title: track.name,
@@ -403,6 +398,22 @@ module.exports = {
     } else {
       apiError = 'no-token';
     }
+    // Written for the reader (the app's errorText shows an error's userMessage).
+    var fail = function (message) {
+      var err = new Error(message);
+      err.userMessage = message;
+      return err;
+    };
+    // A rate limit or a failed request ends the import with its error. The
+    // embed page lists only part of a playlist, without albums, and a refresh
+    // would save that over the playlist; it stands in only for a playlist the
+    // API won't share at all.
+    if (apiError === 'rate-limited') {
+      throw fail('Spotify is limiting requests from Parachord right now. Try the import again later.');
+    }
+    if (apiError === 'api-error') {
+      throw fail('Couldn’t load the playlist from Spotify. Try again.');
+    }
     if (apiError) {
       console.log('Spotify API failed (' + apiError + '), trying embed page scrape fallback...');
       if (window.electron && window.electron.spotify && window.electron.spotify.scrapePlaylist) {
@@ -434,13 +445,13 @@ module.exports = {
         console.log('Embed scrape not available (no electron.spotify.scrapePlaylist)');
       }
       if (apiError === 'not-found') {
-        throw new Error('Playlist not found on Spotify. It may have been deleted or made private.');
+        throw fail('Playlist not found on Spotify. It may have been deleted or made private.');
       } else if (apiError.includes('403')) {
-        throw new Error(
-          'Spotify denied access to this playlist via API, and the embed fallback also failed. This is usually caused by Spotify Developer Mode restrictions. Try importing one of your own playlists.',
+        throw fail(
+          'Spotify didn’t share this playlist’s tracks: it only shares playlists you own or collaborate on. Copy it to a playlist of your own in Spotify, then import that one.',
         );
       } else {
-        throw new Error('Could not load playlist from Spotify.');
+        throw fail('Could not load playlist from Spotify.');
       }
     }
     return null;
