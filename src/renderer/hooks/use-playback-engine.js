@@ -38,6 +38,7 @@
 
 const { pickTrackMatch } = require('../../../sync-providers/track-match');
 const { sourceBlockId } = require('../lib/bad-match-report');
+const { songKey, withPinnedSource, songAllows } = require('../lib/song-source-prefs');
 const { isPlayableSource } = require('../lib/playable-source');
 const { fallbackAfter, trackToHoldAfterFailure, OFFLINE_PLAY_MESSAGE, isDeviceOffline, unsupportedAudioMessage, dropSubsonicSecrets, playbackDurationSeconds, compareCandidateSources, playableSourceIds, previousAction, RADIO_SEED_PROBE_COUNT, noPlayableSimilarTracksMessage, hasPlayableSource, advanceAction, leaveSessionTrigger, repeatLap, pushPlayHistory, historyForReplacedTrack, isSameTrack, pendingStartAt, trackPositionKey } = require('../lib/playback-helpers');
 const { reconcileEnginePlayState, musicKitStatePlaying, musicKitWebHoldsTrack, playStartPending, restartPositionForResume, PLAY_START_PATIENCE_MS, nativeAppleMusicPlaying, spotifyPlayingTrack, EXTERNAL_RESUME_POLL_MS } = require('../lib/play-state');
@@ -169,6 +170,7 @@ function usePlaybackEngine({// --- Hook objects (slice 1 & 2 composables) ---
     activeResolversRef,
     resolverOrderRef,
     resolverBlocklistRef,
+    songSourcePrefsRef,
     resolverConfigCache,
     getResolverConfigRef,
     resolveTrackRef,
@@ -1057,6 +1059,12 @@ function usePlaybackEngine({// --- Hook objects (slice 1 & 2 composables) ---
         sourceToPlay = trackOrSource;
       }
 
+      const songPref = (songSourcePrefsRef?.current || {})[songKey(trackOrSource)];
+      // A pin to a service that can't play here would skip the on-demand resolve below.
+      if (songPref?.pin && !trackOrSource._pinApplied && activeResolversRef.current.includes(songPref.pin.resolverId)) {
+        trackOrSource = withPinnedSource(trackOrSource, songPref);
+      }
+
       // We have a track with multiple sources - select the best one
       let availableResolvers = playableSourceIds(trackOrSource.sources);
 
@@ -1296,6 +1304,7 @@ function usePlaybackEngine({// --- Hook objects (slice 1 & 2 composables) ---
           entry.sourceId === srcId
         );
       })
+      .filter(s => songAllows(songPref, s.resolverId, preferredResolver))
       .sort((a, b) => compareCandidateSources(a, b, preferredResolver));
 
       if (sortedSources.length === 0) {
@@ -1317,7 +1326,9 @@ function usePlaybackEngine({// --- Hook objects (slice 1 & 2 composables) ---
         }));
         if (autoSkipIfAdvancing('no enabled source matches')) return;
         setTrackLoading(false); // Clear loading state
-        reportUnplayable('No enabled source', 'This track has sources, but none from the plug-ins you have enabled.');
+        reportUnplayable('No enabled source', availableResolvers.some(id => !songAllows(songPref, id, preferredResolver))
+          ? 'You chose never to play this song from the services that have it. Right-click it and choose Choose Source… to change that.'
+          : 'This track has sources, but none from the plug-ins you have enabled.');
         return;
       }
 

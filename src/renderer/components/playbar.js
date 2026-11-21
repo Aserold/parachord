@@ -19,6 +19,7 @@ const { playStartPending } = require('../lib/play-state');
 const { purchaseSource: pickPurchaseSource } = require('../lib/purchase-source');
 const { isPlayableSource } = require('../lib/playable-source');
 const { sourceBlockId } = require('../lib/bad-match-report');
+const { songKey, withSongPref } = require('../lib/song-source-prefs');
 const { ResolverIcon, Tooltip, PlaybackProgress } = require('./ui-atoms');
 const { PAGE_COLORS } = require('../lib/page-colors');
 const { NO_PLUGIN_COLOR, ParachordAppIcon } = require('./brand-logos');
@@ -112,6 +113,8 @@ const Playbar = React.memo(function Playbar(props) {
     requestRepeat,
     requestShuffle,
     resolverBlocklist,
+    songSourcePrefs,
+    setSongSourcePrefs,
     resolverVolumeOffsets,
     resumePending,
     setDraggingTrackForPlaylist,
@@ -573,7 +576,22 @@ const Playbar = React.memo(function Playbar(props) {
                               },
                               onContextMenu: sourceMenuFor(resId)
                             };
-                          }),
+                          }).concat((() => {
+                            const playing = (currentTrack.sources || {})[currentResolverId] || (trackSources[currentTrack.id] || {})[currentResolverId];
+                            if (!playing) return [];
+                            const pref = songSourcePrefs[songKey(currentTrack)];
+                            const remembered = pref?.pin?.resolverId === currentResolverId;
+                            const remember = (on) => setSongSourcePrefs(prev => withSongPref(prev, currentTrack, {
+                              pin: on ? { resolverId: currentResolverId, source: playing } : null,
+                              never: pref?.never
+                            }));
+                            return [{ separator: true }, {
+                              key: 'remember',
+                              label: 'Remember for this song',
+                              onSelect: () => remember(!remembered),
+                              toggle: { checked: remembered, onChange: remember, label: `Always play this song from ${resolver.name}` }
+                            }];
+                          })()),
                           renderTrigger: (t) => React.createElement(Button, Object.assign({}, t, {
                             variant: 'text', tone: 'dark', size: 'sm',
                             onContextMenu: sourceMenuFor(currentResolverId),

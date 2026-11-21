@@ -58,6 +58,7 @@ A modern multi-source music player inspired by [Tomahawk](https://github.com/tom
 - **Shuffle, Repeat & Spinoff** - Shuffle your queue, repeat it or one song, or "spinoff" from any track into a radio station of similar music
 - **Mixed-Source Queues** - Seamlessly play tracks from different services
 - **Resolver Blocklist** - Report and block bad source matches without disabling an entire resolver
+- **Song Sources** - Pick which service, and which exact version, plays a song, or a service it never plays from; undo either in Settings
 
 ### Sharing
 - **Discord Rich Presence** - Opt-in "Listening to Parachord" presence on your Discord profile, with cover art when it's a public https image (Settings → General)

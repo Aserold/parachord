@@ -23,6 +23,7 @@ const { Button } = require('./button');
 const { HeaderControl } = require('./header-control');
 const { RadioGroup, SegmentedChoice, Select, SettingRow, Slider, Switch, TextField } = require('./fields');
 const { EmptyState, ErrorState } = require('./states');
+const { SongSourcesSection } = require('./song-sources-section');
 const { priorityMoves } = require('../lib/priority-order');
 const { pluginMatchesQuery } = require('../lib/plugin-search');
 const { pluginSwitchState } = require('../lib/plugin-switch');
@@ -50,6 +51,7 @@ const SETTINGS_PAGE_HANDLERS = [
   'revertNwayMigration',
   'showConfirmDialog',
   'startNwayMigration',
+  'unblockSource',
 ];
 
 const SettingsPage = React.memo(function SettingsPage(props) {
@@ -107,6 +109,7 @@ const SettingsPage = React.memo(function SettingsPage(props) {
     pluginsFilter,
     releaseDetailsCache,
     rememberQueue,
+    resolverBlocklist,
     resolverOrder,
     resolverSyncSettings,
     resolverVolumeOffsets,
@@ -131,6 +134,7 @@ const SettingsPage = React.memo(function SettingsPage(props) {
     setRememberQueue,
     setResolverVolumeOffsets,
     setScrobblingEnabled,
+    setSongSourcePrefs,
     setSelectedResolver,
     setSettingsTab,
     setShowDiscoveryBadges,
@@ -145,10 +149,12 @@ const SettingsPage = React.memo(function SettingsPage(props) {
     skipExternalPrompt,
     skipUnplayablePrompt,
     skipUnsavedFriendWarning,
+    songSourcePrefs,
     startNwayMigration,
     syncProviderConfig,
     themePref,
     uiZoom,
+    unblockSource,
   } = props;
   // The bound local server port (main-process/auth-port.js), 8888 until known.
   const authPort = authServerStatus?.port || 8888;
@@ -941,6 +947,8 @@ React.createElement(Switch, { checked: skipExternalPrompt, onToggle: async () =>
                           await window.electron.store.set('skip_external_prompt', newValue);
                         }
                       } }))),
+
+                React.createElement(SongSourcesSection, { songSourcePrefs, setSongSourcePrefs, resolverBlocklist, unblockSource }),
 
                 // Media Keys Section
                 React.createElement(SettingsSection, { title: 'Media Keys', description: 'Control how Parachord responds to media keys' },

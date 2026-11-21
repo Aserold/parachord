@@ -116,7 +116,7 @@ function sourcesChangedOnRecheck(cachedSources, freshSources) {
 function trackToHoldAfterFailure(track) {
   if (!track || typeof track !== 'object') return null;
   const {
-    _activeResolver, _streamOwner, _spotifyFallback, _appleMusicFallback, status,
+    _activeResolver, _streamOwner, _spotifyFallback, _appleMusicFallback, _pinApplied, status,
     ...held
   } = track;
   return held;

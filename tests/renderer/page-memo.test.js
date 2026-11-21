@@ -43,6 +43,7 @@ const { FirstRunTutorial, FIRST_RUN_TUTORIAL_HANDLERS } = require('../../src/ren
 const { ExternalTrackPrompt, EXTERNAL_TRACK_PROMPT_HANDLERS } = require('../../src/renderer/components/external-track-prompt');
 const { UnsavedFriendDialog, UNSAVED_FRIEND_DIALOG_HANDLERS } = require('../../src/renderer/components/unsaved-friend-dialog');
 const { NewPlaylistDialog, NEW_PLAYLIST_DIALOG_HANDLERS } = require('../../src/renderer/components/new-playlist-dialog');
+const { ChooseSourceDialog, CHOOSE_SOURCE_DIALOG_HANDLERS } = require('../../src/renderer/components/choose-source-dialog');
 const { QueueSaveDialog, QUEUE_SAVE_DIALOG_HANDLERS } = require('../../src/renderer/components/queue-save-dialog');
 const { UrlImportDialog, URL_IMPORT_DIALOG_HANDLERS } = require('../../src/renderer/components/url-import-dialog');
 const { AmazonManageDialog } = require('../../src/renderer/components/amazon-manage-dialog');
@@ -79,6 +80,7 @@ const PAGES = [
   { component: 'ExternalTrackPrompt', file: 'external-track-prompt.js', handlersVar: 'externalTrackPromptHandlers', handlers: EXTERNAL_TRACK_PROMPT_HANDLERS, memo: ExternalTrackPrompt },
   { component: 'UnsavedFriendDialog', file: 'unsaved-friend-dialog.js', handlersVar: 'unsavedFriendDialogHandlers', handlers: UNSAVED_FRIEND_DIALOG_HANDLERS, memo: UnsavedFriendDialog },
   { component: 'NewPlaylistDialog', file: 'new-playlist-dialog.js', handlersVar: 'newPlaylistDialogHandlers', handlers: NEW_PLAYLIST_DIALOG_HANDLERS, memo: NewPlaylistDialog },
+  { component: 'ChooseSourceDialog', file: 'choose-source-dialog.js', handlersVar: 'chooseSourceDialogHandlers', handlers: CHOOSE_SOURCE_DIALOG_HANDLERS, memo: ChooseSourceDialog },
   { component: 'QueueSaveDialog', file: 'queue-save-dialog.js', handlersVar: 'queueSaveDialogHandlers', handlers: QUEUE_SAVE_DIALOG_HANDLERS, memo: QueueSaveDialog },
   { component: 'UrlImportDialog', file: 'url-import-dialog.js', handlersVar: 'urlImportDialogHandlers', handlers: URL_IMPORT_DIALOG_HANDLERS, memo: UrlImportDialog },
   { component: 'AmazonManageDialog', file: 'amazon-manage-dialog.js', handlersVar: null, handlers: [], memo: AmazonManageDialog },

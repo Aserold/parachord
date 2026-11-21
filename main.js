@@ -4457,6 +4457,12 @@ ipcMain.handle('show-track-context-menu', async (event, data) => {
       }
     });
   }
+  if (data.type === 'track' && data.track?.artist && data.track?.title) {
+    menuItems.push({
+      label: 'Choose Source…',
+      click: () => safeSendToRenderer('track-context-menu-action', { action: 'choose-source', track: data.track })
+    });
+  }
 
   // An artist's top tracks go to the queue from its menu (the cards' hover
   // keeps only Play).

@@ -2144,6 +2144,8 @@ const { NO_PLUGIN_COLOR } = require('./components/brand-logos');
 const { Modal, SidePanel, ConfirmModal } = require('./components/modal');
 const { AddFriendDialog } = require('./components/add-friend-dialog');
 const { PlaylistUpdateDialog } = require('./components/playlist-update-dialog');
+const { ChooseSourceDialog } = require('./components/choose-source-dialog');
+const { songKey, withSongPref, songSourceChoices } = require('./lib/song-source-prefs');
 const { KeyboardShortcutsDialog } = require('./components/keyboard-shortcuts');
 const { WhatsNewDialog } = require('./components/whats-new-dialog');
 const { ArtistCard, ArtistCardSkeleton, RankBadge } = require('./components/artist-card');
@@ -3429,6 +3431,8 @@ const Parachord = () => {
   const recommendationBlocklistRef = useRef({ artists: [], albums: [], tracks: [] }); // Ref for blocklist to avoid stale closures
   const [resolverBlocklist, setResolverBlocklist] = useState([]); // Array of { artist, title, resolverId, blockedAt }
   const resolverBlocklistRef = useRef([]); // Ref for blocklist to avoid stale closures
+  const [songSourcePrefs, setSongSourcePrefs] = useState({}); // lib/song-source-prefs.js
+  const songSourcePrefsRef = useRef({});
 
   // Results sidebar state (generic/reusable)
   const [resultsSidebar, setResultsSidebar] = useState(null);
@@ -3992,6 +3996,7 @@ const Parachord = () => {
   // The question asked when a playlist link is dropped or opened from a
   // parachord://import link: { url, isService, sourceLabel, description, resolve }.
   const [updateModeAsk, setUpdateModeAsk] = useState(null);
+  const [chooseSourceTrack, setChooseSourceTrack] = useState(null);
   const [urlImportLoading, setUrlImportLoading] = useState(false);
 
   // Collection page state
@@ -6407,6 +6412,7 @@ const Parachord = () => {
   useEffect(() => { autoPinnedFriendIdsRef.current = autoPinnedFriendIds; }, [autoPinnedFriendIds]);
   useEffect(() => { recommendationBlocklistRef.current = recommendationBlocklist; }, [recommendationBlocklist]);
   useEffect(() => { resolverBlocklistRef.current = resolverBlocklist; }, [resolverBlocklist]);
+  useEffect(() => { songSourcePrefsRef.current = songSourcePrefs; }, [songSourcePrefs]);
 
   // Global stream playback quality. Store keys playback_quality/playback_abr/
   // playback_spatial drive lib/widevine-player's variant selection (Amazon
@@ -8404,6 +8410,7 @@ const Parachord = () => {
       activeResolversRef: playbackResolversRef,
       resolverOrderRef,
       resolverBlocklistRef,
+      songSourcePrefsRef,
       resolverConfigCache,
       getResolverConfigRef,
       resolveTrackRef,
@@ -15241,6 +15248,8 @@ ${trackListXml}
             sourceType: 'track'
           });
           setSelectedPlaylistsForAdd([]);
+        } else if (data.action === 'choose-source' && data.track) {
+          setChooseSourceTrack(data.track);
         } else if (data.action === 'open-collection-loves') {
           // Home's recent-loves tile: Collection's songs, newest loved first.
           if (openCollectionLovesRef.current) openCollectionLovesRef.current();
@@ -15916,6 +15925,12 @@ ${trackListXml}
       window.electron.store.set('resolver_blocklist', resolverBlocklist);
     }
   }, [resolverBlocklist, cacheLoaded]);
+
+  useEffect(() => {
+    if (cacheLoaded && window.electron?.store) {
+      window.electron.store.set('song_source_prefs', songSourcePrefs);
+    }
+  }, [songSourcePrefs, cacheLoaded]);
 
   // Persist AI suggestions when they finish loading (so they appear instantly on next session)
   useEffect(() => {
@@ -18985,7 +19000,7 @@ ${trackListXml}
         'skip_external_prompt', 'skip_unplayable_prompt',
         'auto_launch_spotify', 'skip_unsaved_friend_warning', 'remember_queue',
         'show_discovery_badges', 'home_suggestions_auto_refresh', 'playlists_view_mode', 'ai_include_history',
-        'recommendation_blocklist', 'resolver_blocklist', 'ai_chat_histories',
+        'recommendation_blocklist', 'resolver_blocklist', 'song_source_prefs', 'ai_chat_histories',
         'selected_chat_provider', 'discovery_seen_recommendations', 'discovery_seen_criticsPicks',
         'discovery_seen_charts', 'discovery_seen_newReleases', 'discovery_seen_concerts',
         // Concerts location
@@ -19783,6 +19798,10 @@ ${trackListXml}
       if (Array.isArray(savedResolverBlocklist)) {
         setResolverBlocklist(savedResolverBlocklist);
         console.log('📦 Loaded resolver blocklist:', savedResolverBlocklist.length, 'entries');
+      }
+      const savedSongSourcePrefs = d['song_source_prefs'];
+      if (savedSongSourcePrefs && typeof savedSongSourcePrefs === 'object' && !Array.isArray(savedSongSourcePrefs)) {
+        setSongSourcePrefs(savedSongSourcePrefs);
       }
 
       // Load AI chat histories (per-provider)
@@ -35773,10 +35792,21 @@ useEffect(() => {
     navigateTo, noteSyncAuth,
   });
 
+  // Settings › Song Sources: undo a Report Bad Match. Its cache entry is
+  // re-resolved, or the blocked source stays gone until the cache expires.
+  const unblockSource = (entry) => {
+    setResolverBlocklist(prev => prev.filter(x => x !== entry));
+    const cached = trackSourcesCache.current[`${entry.artist}|${entry.title}`];
+    if (cached) {
+      markTrackSourcesDirty();
+      cached.resolverHash = null;
+    }
+  };
+
   // Stable function props for the memo'd SettingsPage (keys must
   // match SETTINGS_PAGE_HANDLERS in settings-page.js).
   const settingsPageHandlers = useStableHandlers({
-    confirmAsync, copyParachordLink, handleCleanupDuplicatePlaylists, handleInstallResolver, handleResolverDragEnd, handleResolverDragEnter, handleResolverDragLeave, handleResolverDragOver, handleResolverDragStart, handleResolverDrop, handleThemeChange, loadMarketplaceManifest, navigateBack, openSyncSetupModal, revertNwayMigration, showConfirmDialog, startNwayMigration,
+    confirmAsync, copyParachordLink, handleCleanupDuplicatePlaylists, handleInstallResolver, handleResolverDragEnd, handleResolverDragEnter, handleResolverDragLeave, handleResolverDragOver, handleResolverDragStart, handleResolverDrop, handleThemeChange, loadMarketplaceManifest, navigateBack, openSyncSetupModal, revertNwayMigration, showConfirmDialog, startNwayMigration, unblockSource,
   });
 
   // Stable function props for the memo'd Playbar (keys must
@@ -35801,6 +35831,20 @@ useEffect(() => {
   // match UNSAVED_FRIEND_DIALOG_HANDLERS in unsaved-friend-dialog.js).
   const unsavedFriendDialogHandlers = useStableHandlers({
     confirmUnpinFriend, saveFriendToCollection,
+  });
+
+  // The memo'd ChooseSourceDialog's props (keys must match
+  // CHOOSE_SOURCE_DIALOG_HANDLERS in choose-source-dialog.js).
+  const chooseSourcePref = useMemo(() => chooseSourceTrack && songSourcePrefs[songKey(chooseSourceTrack)], [chooseSourceTrack, songSourcePrefs]);
+  const chooseSourceChoices = useMemo(() => chooseSourceTrack && songSourceChoices(chooseSourceTrack, chooseSourcePref, { trackSources, playbackResolvers, resolverOrder }),
+    [chooseSourceTrack, chooseSourcePref, trackSources, playbackResolvers, resolverOrder]);
+  const closeChooseSource = () => setChooseSourceTrack(null);
+  const saveChosenSource = (pref) => {
+    setSongSourcePrefs(prev => withSongPref(prev, chooseSourceTrack, pref));
+    setChooseSourceTrack(null);
+  };
+  const chooseSourceDialogHandlers = useStableHandlers({
+    closeChooseSource, saveChosenSource,
   });
 
   // Stable function props for the memo'd NewPlaylistDialog (keys must
@@ -36670,6 +36714,9 @@ useEffect(() => {
           skipExternalPrompt,
           skipUnplayablePrompt,
           skipUnsavedFriendWarning,
+          resolverBlocklist,
+          songSourcePrefs,
+          setSongSourcePrefs,
           syncProviderConfig,
           themePref,
           uiZoom,
@@ -36729,6 +36776,8 @@ useEffect(() => {
       removeTrackFromCollection,
       repeatMode,
       resolverBlocklist,
+      songSourcePrefs,
+      setSongSourcePrefs,
       resolverVolumeOffsets,
       resumePending,
       setDraggingTrackForPlaylist,
@@ -37005,6 +37054,12 @@ useEffect(() => {
       description: updateModeAsk.description,
       onChoose: answerUpdateModeAsk,
       onCancel: () => answerUpdateModeAsk(null)
+    }),
+    chooseSourceTrack && React.createElement(ChooseSourceDialog, {
+      track: chooseSourceTrack,
+      pref: chooseSourcePref,
+      sources: chooseSourceChoices,
+      ...chooseSourceDialogHandlers
     }),
 
     // Amazon Music sign-in dialog. Opens music.amazon.com inside Parachord.
