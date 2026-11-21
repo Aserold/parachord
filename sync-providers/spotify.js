@@ -57,6 +57,9 @@ const MAX_RETRIES = 5;
 // request. Past this the breaker opens until Retry-After has passed, and the
 // call fails now, so the sync ends and the next one waits for the breaker.
 const MAX_RETRY_AFTER_WAIT_S = 60;
+// Between a playlist push's track searches. At 100 ms a 300-track playlist was
+// 300 searches in about a minute, on a Development Mode app's small allowance.
+const SEARCH_GAP_MS = 350;
 
 const spotifyRequest = async (endpoint, token, options = {}, _retryCount = 0) => {
   if (_retryCount === 0) _breakerGuard(); // §2b: fail-fast while the abuse cooldown is open
@@ -909,8 +912,9 @@ const SpotifySyncProvider = {
     const unresolved = [];
 
     for (const track of tracks) {
-      // Skip tracks that already have a Spotify URI or ID
-      const existingUri = track.spotifyUri || (track.spotifyId ? `spotify:track:${track.spotifyId}` : null);
+      // Skip tracks that already have a Spotify URI or ID: the track's own
+      // (imported from Spotify) or the one resolution found (sources.spotify).
+      const existingUri = this.nativeIdOf(track) || this.nativeIdOf(track.sources?.spotify);
       if (existingUri) {
         resolved.push({ ...track, spotifyUri: existingUri });
         continue;
@@ -945,9 +949,11 @@ const SpotifySyncProvider = {
           unresolved.push({ artist: track.artist, title: track.title });
         }
 
-        // Rate limit
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, SEARCH_GAP_MS));
       } catch (error) {
+        // Spotify asked for a pause: the rest would all be refused, and a
+        // refusal is not "no match on Spotify".
+        _breakerGuard();
         console.error(`Failed to resolve track "${track.title}" by "${track.artist}":`, error.message);
         unresolved.push({ artist: track.artist, title: track.title });
       }

@@ -136,6 +136,9 @@ const PARITY_GUARDS = [
       'sync.createPlaylist(',
       'sync.pushPlaylist(',
       'resolveTracks',
+      // A push whose tracks didn't resolve isn't sent: with no provider IDs
+      // it would empty the remote playlist.
+      "throw new Error('track resolution failed');",
       { text: 'syncedAt: Date.now()', count: 2 },
     ],
   },
