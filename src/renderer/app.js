@@ -4528,17 +4528,17 @@ const Parachord = () => {
                     console.log(`[Sync] Pushing updates for "${playlist.title}" to ${providerId}`);
                     let pushOk = false;
                     try {
-                      // Resolve tracks to provider-specific URIs before pushing
-                      let tracksForPush = playlist.tracks || [];
-                      try {
-                        const resolveResult = await window.electron.sync.resolveTracks(providerId, tracksForPush);
-                        if (resolveResult.success) {
-                          tracksForPush = resolveResult.resolved;
-                          playlist.syncedTo[providerId].unresolvedTracks = resolveResult.unresolved;
-                        }
-                      } catch (resolveErr) {
-                        console.warn(`[Sync] Track resolution failed for "${playlist.title}" on ${providerId}:`, resolveErr.message);
+                      // Resolve tracks to provider-specific URIs before pushing.
+                      // Unresolved, they carry no provider IDs, and pushing them
+                      // would empty the remote playlist: the push waits instead.
+                      const resolveResult = await window.electron.sync.resolveTracks(providerId, playlist.tracks || [])
+                        .catch(err => ({ success: false, error: err.message }));
+                      if (!resolveResult.success) {
+                        console.warn(`[Sync] Track resolution failed for "${playlist.title}" on ${providerId}:`, resolveResult.error);
+                        throw new Error('track resolution failed');
                       }
+                      const tracksForPush = resolveResult.resolved;
+                      playlist.syncedTo[providerId].unresolvedTracks = resolveResult.unresolved;
 
                       const pushResult = await window.electron.sync.pushPlaylist(
                         providerId,
@@ -10154,17 +10154,17 @@ const Parachord = () => {
                 console.log(`[Sync] Pushing updates for "${playlist.title}" to ${providerId}`);
                 let pushOk = false;
                 try {
-                  // Resolve tracks to provider-specific URIs before pushing
-                  let tracksForPush = playlist.tracks || [];
-                  try {
-                    const resolveResult = await window.electron.sync.resolveTracks(providerId, tracksForPush);
-                    if (resolveResult.success) {
-                      tracksForPush = resolveResult.resolved;
-                      playlist.syncedTo[providerId].unresolvedTracks = resolveResult.unresolved;
-                    }
-                  } catch (resolveErr) {
-                    console.warn(`[Sync] Track resolution failed for "${playlist.title}" on ${providerId}:`, resolveErr.message);
+                  // Resolve tracks to provider-specific URIs before pushing.
+                  // Unresolved, they carry no provider IDs, and pushing them
+                  // would empty the remote playlist: the push waits instead.
+                  const resolveResult = await window.electron.sync.resolveTracks(providerId, playlist.tracks || [])
+                    .catch(err => ({ success: false, error: err.message }));
+                  if (!resolveResult.success) {
+                    console.warn(`[Sync] Track resolution failed for "${playlist.title}" on ${providerId}:`, resolveResult.error);
+                    throw new Error('track resolution failed');
                   }
+                  const tracksForPush = resolveResult.resolved;
+                  playlist.syncedTo[providerId].unresolvedTracks = resolveResult.unresolved;
 
                   const pushResult = await window.electron.sync.pushPlaylist(
                     providerId,

@@ -54,6 +54,20 @@ describe('P1 — Spotify resolveTracks confidence gate (D-Legacy-1)', () => {
   });
 });
 
+describe('Spotify resolveTracks reuses the ID resolution already found', () => {
+  test('a track with sources.spotify is not searched again', async () => {
+    global.fetch = jest.fn();
+    const { resolved, unresolved } = await spotify.resolveTracks([
+      { title: 'A', artist: 'X', sources: { spotify: { spotifyId: 'id1', spotifyUri: 'spotify:track:id1' } } },
+      { title: 'B', artist: 'X', sources: { spotify: { spotifyId: 'id2' } } },
+      { title: 'C', artist: 'X', spotifyId: 'id3' },
+    ], 'tok');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(resolved.map(t => t.spotifyUri)).toEqual(['spotify:track:id1', 'spotify:track:id2', 'spotify:track:id3']);
+    expect(unresolved).toEqual([]);
+  });
+});
+
 describe('P1 — Apple Music resolveTracks confidence gate (D-Legacy-1)', () => {
   test('wrong-artist same-title top hit is DROPPED, not minted', async () => {
     global.fetch = jest.fn(async (url) => {

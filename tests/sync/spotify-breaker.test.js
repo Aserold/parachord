@@ -66,12 +66,24 @@ describe('spotify.js fail-fast while the breaker is open', () => {
     global.fetch = jest.fn();
     // Open the breaker far into the future via the persistence-restore hook.
     spotify._setBreakerStore({ load: () => ({ openUntil: Date.now() + 6 * HOUR_MS, level: 2 }) });
-    const { resolved, unresolved } = await spotify.resolveTracks(
-      [{ title: 'X', artist: 'Y' }], 'tok'
-    );
+    // A refusal, not "no match on Spotify": the push must not go on with fewer tracks.
+    await expect(spotify.resolveTracks([{ title: 'X', artist: 'Y' }], 'tok')).rejects.toThrow(/cooldown/i);
     expect(global.fetch).not.toHaveBeenCalled(); // fail-fast: no hammering the banned client_id
-    expect(resolved).toEqual([]);
-    expect(unresolved).toEqual([{ artist: 'Y', title: 'X' }]);
+  });
+
+  test('resolveTracks ends on a rate-limit refusal, the short pause included', async () => {
+    global.fetch = jest.fn();
+    sharedPause.noteStatus(429, '30');
+    await expect(spotify.resolveTracks([{ title: 'X', artist: 'Y' }], 'tok')).rejects.toThrow(/rate.limit/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('any other failed search is one unresolved track, and the rest go on', async () => {
+    const found = { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ tracks: { items: [{ name: 'B', artists: [{ name: 'Y' }], uri: 'spotify:track:b' }] } }) };
+    global.fetch = jest.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(found);
+    const { resolved, unresolved } = await spotify.resolveTracks([{ title: 'A', artist: 'Y' }, { title: 'B', artist: 'Y' }], 'tok');
+    expect(unresolved).toEqual([{ artist: 'Y', title: 'A' }]);
+    expect(resolved.map(t => t.spotifyUri)).toEqual(['spotify:track:b']);
   });
 });
 
